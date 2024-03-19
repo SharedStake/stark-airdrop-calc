@@ -1,86 +1,56 @@
-/* 
-interactive dune query here: https://dune.com/queries/3499440/5884783/
-saved here for posterity and review
- */ 
-
- SELECT sgt.address AS sgt_addr, sgt.balance AS sgt_bal, veth2.address AS veth2_addr, veth2.balance AS veth2_bal
-FROM (
-  WITH transfers AS (
-  /* we count all users who minted veth2 withot discounting ALL sends to include users staking in contracts */
-  /* we only subtract sends for users who sent to the 0 address and exited via a burn */
+--Possibly relevant tables based on your question: ['erc20_ethereum.evt_transfer', 'erc20_ethereum.ERC20_evt_Transfer', 'erc20_ethereum.ERC20PresetMinterPauser_evt_Transfer', 'erc20_ethereum.evt_Transfer']
+WITH transfers AS (
   SELECT
-  "from",
-    NULL AS "to",
-    -SUM(value) AS value
-  FROM erc20_ethereum.evt_Transfer
-  WHERE
-    contract_address = 0x898BAD2774EB97cF6b94605677F43b41871410B1
-    AND (
-        "to" = 0x0000000000000000000000000000000000000000
-        OR "to" = NULL
-        OR "to" = 0x000000000000000000000000000000000000dEaD
-    )
-    AND evt_block_number <= 15537393 -- https://www.investopedia.com/ethereum-completes-the-merge-6666337#:~:text=Key%20Takeaways,1%3A42%3A42%20EST.
-  GROUP BY
-    "from"
-  UNION ALL
-  
-  SELECT
-    NULL AS "from",
-    "to",
-    SUM(value) AS value
+    "to" AS address,
+    SUM(value) AS tokens
   FROM erc20_ethereum.evt_Transfer
   WHERE
     contract_address = 0x898BAD2774EB97cF6b94605677F43b41871410B1
     AND evt_block_number <= 15537393
+    AND (
+        "from" = 0x0000000000000000000000000000000000000000
+        OR "from" = NULL
+        OR "from" = 0x000000000000000000000000000000000000dEaD
+        OR "from" = 0xe37E2a01feA778BC1717d72Bd9f018B6A6B241D5
+        OR "from" = 0xdec2157831D6ABC3Ec328291119cc91B337272b5
+        OR "from" = 0x16BEa2e63aDAdE5984298D53A4d4d9c09e278192
+    ) AND NOT (
+        "to" = 0xe37E2a01feA778BC1717d72Bd9f018B6A6B241D5
+        OR "to" = 0xdec2157831D6ABC3Ec328291119cc91B337272b5
+        OR "to" = 0x16BEa2e63aDAdE5984298D53A4d4d9c09e278192
+    )
   GROUP BY
     "to"
-), balances AS (
-  SELECT
-    COALESCE("from", "to") AS address,
-    SUM(value) AS balance
-  FROM transfers
-  GROUP BY
-    COALESCE("from", "to")
-)
-SELECT
-  address,
-  balance
-FROM balances) AS veth2,
---Possibly relevant tables based on your question: ['tokens.balances', 'erc20_ethereum.evt_Transfer', 'erc20.evt_Transfer', 'erc20_ethereum.ERC20_evt_Transfer']
-(WITH transfers AS (
-  SELECT
-    "from" AS address,
-    -SUM(value) AS amount
-  FROM erc20_ethereum.evt_Transfer
-  WHERE
-    contract_address = 0x24c19f7101c1731b85f1127eaa0407732e36ecdd
-  GROUP BY
-    "from"
   UNION ALL
   SELECT
-    "to" AS address,
-    SUM(value) AS amount
+    "from" AS address,
+    -SUM(value) AS tokens
   FROM erc20_ethereum.evt_Transfer
   WHERE
-    contract_address = 0x24c19f7101c1731b85f1127eaa0407732e36ecdd
+    contract_address = 0x898BAD2774EB97cF6b94605677F43b41871410B1
+    AND evt_block_number <= 15537393
+    AND (
+        "to" = 0x0000000000000000000000000000000000000000
+        OR "to" = NULL
+        OR "to" = 0x000000000000000000000000000000000000dEaD
+        OR "to" = 0xe37E2a01feA778BC1717d72Bd9f018B6A6B241D5
+        OR "to" = 0xdec2157831D6ABC3Ec328291119cc91B337272b5
+        OR "to" = 0x16BEa2e63aDAdE5984298D53A4d4d9c09e278192
+    )
   GROUP BY
-    "to"
+    "from"
 ), balances AS (
   SELECT
     address,
-    SUM(amount) AS balance
+    SUM(tokens) AS balance
   FROM transfers
   GROUP BY
     address
   HAVING
-    SUM(amount) > 0
- ) SELECT
-  address,
-  balance
+    SUM(tokens) > 1000000000000000000
+)
+SELECT
+address, balance
+  --sum(balance)
 FROM balances
-) as SGT
-WHERE
-  sgt.balance > 0 AND veth2.balance > 0 AND sgt.address = veth2.address
-ORDER BY
-  veth2.balance DESC
+ORDER BY balance desc
